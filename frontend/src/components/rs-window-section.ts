@@ -169,6 +169,16 @@ export class RsWindowSection extends LitElement {
       flex: 1;
     }
 
+    .entity-picker-wrap {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--divider-color, #eee);
+    }
+
+    ha-entity-picker {
+      width: 100%;
+    }
+
     .delay-view {
       font-size: 12px;
       color: var(--secondary-text-color);
@@ -315,9 +325,44 @@ export class RsWindowSection extends LitElement {
                 : nothing}
             `
           : nothing}
+        <div class="entity-picker-wrap">
+          <ha-entity-picker
+            .hass=${this.hass}
+            .includeDomains=${["binary_sensor"]}
+            .entityFilter=${this._entityFilter}
+            .value=${""}
+            label=${localize("devices.add_entity", this.hass.language)}
+            @value-changed=${this._onEntityPicked}
+          ></ha-entity-picker>
+        </div>
       </div>
     `;
   }
+
+  private _entityFilter = (entity: { entity_id: string }): boolean => {
+    const id = entity.entity_id;
+    const idAfterDot = id.substring(id.indexOf(".") + 1);
+    if (idAfterDot.startsWith("roommind_")) return false;
+    if (this.windowSensors.has(id)) return false;
+    const dc = this.hass.states[id]?.attributes?.device_class;
+    return dc === "window" || dc === "door" || dc === "opening";
+  };
+
+  private _onEntityPicked = (e: CustomEvent) => {
+    const entityId = e.detail?.value as string;
+    const picker = e.target as HTMLElement & { value: string };
+    picker.value = "";
+    if (!entityId || this.windowSensors.has(entityId)) return;
+    const next = new Set(this.windowSensors);
+    next.add(entityId);
+    this.dispatchEvent(
+      new CustomEvent("window-config-changed", {
+        detail: { key: "window_sensors", value: [...next] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  };
 
   private _renderWindowRow(entityId: string, external: boolean) {
     const isSelected = this.windowSensors.has(entityId);

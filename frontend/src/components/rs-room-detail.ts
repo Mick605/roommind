@@ -506,13 +506,9 @@ export class RsRoomDetail extends LitElement {
                     .editing=${this._editingDevices}
                     .devices=${this._devices}
                     .selectedTempSensor=${this._selectedTempSensor}
-                    .selectedHumiditySensor=${this._selectedHumiditySensor}
-                    .selectedOccupancySensors=${this._selectedOccupancySensors}
-                    .selectedWindowSensors=${this._selectedWindowSensors}
                     .valveProtectionExclude=${this._valveProtectionExclude}
                     .valveProtectionEnabled=${this.valveProtectionEnabled}
                     @device-changed=${this._onDeviceChanged}
-                    @external-entity-added=${this._onExternalEntityAdded}
                     @valve-protection-exclude-toggle=${this._onValveProtectionExcludeToggle}
                   ></rs-device-section>
                 </rs-section-card>
@@ -791,29 +787,6 @@ export class RsRoomDetail extends LitElement {
       next.delete(entityId);
     }
     this._valveProtectionExclude = next;
-    this._autoSave();
-  }
-
-  private _onExternalEntityAdded(
-    e: CustomEvent<{
-      entityId: string;
-      category: "temp" | "humidity" | "window" | "occupancy";
-    }>,
-  ) {
-    const { entityId, category } = e.detail;
-    if (category === "temp") {
-      this._selectedTempSensor = entityId;
-    } else if (category === "window") {
-      const next = new Set(this._selectedWindowSensors);
-      next.add(entityId);
-      this._selectedWindowSensors = next;
-    } else if (category === "occupancy") {
-      const next = new Set(this._selectedOccupancySensors);
-      next.add(entityId);
-      this._selectedOccupancySensors = next;
-    } else {
-      this._selectedHumiditySensor = entityId;
-    }
     this._autoSave();
   }
 

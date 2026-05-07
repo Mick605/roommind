@@ -164,6 +164,16 @@ export class RsSensorSection extends LitElement {
       font-weight: 500;
       flex-shrink: 0;
     }
+
+    .entity-picker-wrap {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--divider-color, #eee);
+    }
+
+    ha-entity-picker {
+      width: 100%;
+    }
   `;
 
   render() {
@@ -364,8 +374,67 @@ export class RsSensorSection extends LitElement {
           ${externalOccupancySensors.map((id) => this._renderOccupancyRow(id, true))}
         </div>
       </div>
+
+      <div class="entity-picker-wrap">
+        <ha-entity-picker
+          .hass=${this.hass}
+          .includeDomains=${["sensor", "binary_sensor", "climate", "input_number", "input_boolean"]}
+          .entityFilter=${this._entityFilter}
+          .value=${""}
+          label=${localize("devices.add_entity", this.hass.language)}
+          @value-changed=${this._onEntityPicked}
+        ></ha-entity-picker>
+      </div>
     `;
   }
+
+  private _entityFilter = (entity: { entity_id: string }): boolean => {
+    const id = entity.entity_id;
+    const idAfterDot = id.substring(id.indexOf(".") + 1);
+    if (idAfterDot.startsWith("roommind_")) return false;
+    if (this.temperatureSensor === id) return false;
+    if (this.humiditySensor === id) return false;
+    if (this.occupancySensors.has(id)) return false;
+    if (id.startsWith("sensor.")) {
+      const dc = this.hass.states[id]?.attributes?.device_class;
+      return dc === "temperature" || dc === "humidity";
+    }
+    if (id.startsWith("binary_sensor.")) {
+      const dc = this.hass.states[id]?.attributes?.device_class;
+      return dc === "occupancy" || dc === "motion" || dc === "presence";
+    }
+    if (id.startsWith("climate.")) {
+      return this.hass.states[id]?.attributes?.current_temperature != null;
+    }
+    return id.startsWith("input_number.") || id.startsWith("input_boolean.");
+  };
+
+  private _onEntityPicked = (e: CustomEvent) => {
+    const entityId = e.detail?.value as string;
+    const picker = e.target as HTMLElement & { value: string };
+    picker.value = "";
+    if (!entityId) return;
+
+    if (entityId.startsWith("input_boolean.")) {
+      if (!this.occupancySensors.has(entityId)) this._onOccupancySensorToggle(entityId, true);
+      return;
+    }
+    if (entityId.startsWith("binary_sensor.")) {
+      if (!this.occupancySensors.has(entityId)) this._onOccupancySensorToggle(entityId, true);
+      return;
+    }
+    if (entityId.startsWith("input_number.")) {
+      const uom = this.hass.states[entityId]?.attributes?.unit_of_measurement;
+      this._onSensorSelected(entityId, uom === "%" ? "humidity" : "temp");
+      return;
+    }
+    if (entityId.startsWith("climate.")) {
+      this._onSensorSelected(entityId, "temp");
+      return;
+    }
+    const dc = this.hass.states[entityId]?.attributes?.device_class;
+    this._onSensorSelected(entityId, dc === "humidity" ? "humidity" : "temp");
+  };
 
   private _renderSensorRow(entityId: string, type: "temp" | "humidity", external: boolean) {
     const entityState = this.hass.states[entityId];

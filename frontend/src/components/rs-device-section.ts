@@ -13,9 +13,6 @@ export class RsDeviceSection extends LitElement {
   @property({ attribute: false }) public area!: HassArea;
   @property({ attribute: false }) public devices: DeviceConfig[] = [];
   @property({ type: String }) public selectedTempSensor = "";
-  @property({ type: String }) public selectedHumiditySensor = "";
-  @property({ attribute: false }) public selectedOccupancySensors: Set<string> = new Set();
-  @property({ attribute: false }) public selectedWindowSensors: Set<string> = new Set();
   @property({ attribute: false }) public valveProtectionExclude: Set<string> = new Set();
   @property({ type: Boolean }) public valveProtectionEnabled = false;
 
@@ -454,7 +451,7 @@ export class RsDeviceSection extends LitElement {
       <div class="entity-picker-wrap">
         <ha-entity-picker
           .hass=${this.hass}
-          .includeDomains=${["climate", "sensor", "binary_sensor", "input_boolean", "input_number"]}
+          .includeDomains=${["climate"]}
           .entityFilter=${this._entityFilter}
           .value=${""}
           label=${localize("devices.add_entity", this.hass.language)}
@@ -866,98 +863,22 @@ export class RsDeviceSection extends LitElement {
 
   private _entityFilter = (entity: { entity_id: string }): boolean => {
     const id = entity.entity_id;
-    // Exclude RoomMind's own entities to prevent self-assignment
     const idAfterDot = id.substring(id.indexOf(".") + 1);
     if (idAfterDot.startsWith("roommind_")) return false;
-    // Exclude already-selected entities
     if (this.devices.some((d) => d.entity_id === id)) return false;
-    if (this.selectedTempSensor === id) return false;
-    if (this.selectedHumiditySensor === id) return false;
-    if (this.selectedOccupancySensors.has(id)) return false;
-    if (this.selectedWindowSensors.has(id)) return false;
-    // For sensors, only show temperature and humidity
-    if (id.startsWith("sensor.")) {
-      const dc = this.hass.states[id]?.attributes?.device_class;
-      if (dc !== "temperature" && dc !== "humidity") return false;
-    }
-    if (id.startsWith("binary_sensor.")) {
-      const dc = this.hass.states[id]?.attributes?.device_class;
-      if (
-        dc !== "window" &&
-        dc !== "door" &&
-        dc !== "opening" &&
-        dc !== "occupancy" &&
-        dc !== "motion" &&
-        dc !== "presence"
-      )
-        return false;
-    }
-    // input_number, input_boolean: allow all (no device_class filtering)
-    return true;
+    return id.startsWith("climate.");
   };
 
   private _onEntityPicked(e: CustomEvent) {
     const entityId = e.detail?.value as string;
-    if (!entityId) return;
-
-    // Auto-categorize based on domain and device_class
-    let category: "climate" | "temp" | "humidity" | "window" | "occupancy";
-    if (entityId.startsWith("climate.")) {
-      category = "climate";
-    } else if (entityId.startsWith("input_boolean.")) {
-      category = "occupancy";
-    } else if (entityId.startsWith("binary_sensor.")) {
-      const dc = this.hass.states[entityId]?.attributes?.device_class;
-      if (dc === "occupancy" || dc === "motion" || dc === "presence") {
-        category = "occupancy";
-      } else {
-        category = "window";
-      }
-    } else if (entityId.startsWith("input_number.")) {
-      const uom = this.hass.states[entityId]?.attributes?.unit_of_measurement;
-      category = uom === "%" ? "humidity" : "temp";
-    } else {
-      const deviceClass = this.hass.states[entityId]?.attributes?.device_class;
-      category = deviceClass === "humidity" ? "humidity" : "temp";
-    }
-
-    if (category === "climate") {
-      const detected = this._detectClimateType(entityId);
-      const type: DeviceType = detected === "thermostat" ? "trv" : "ac";
-      const newDevices = [...this.devices, { entity_id: entityId, type, role: "auto" as const }];
-      this._fireDeviceChanged(newDevices);
-      // Clear the picker value
-      const picker = e.target as HTMLElement & { value: string };
-      picker.value = "";
-      return;
-    }
-
-    // For occupancy sensors, dispatch via dedicated event
-    if (category === "occupancy") {
-      this.dispatchEvent(
-        new CustomEvent("external-entity-added", {
-          detail: { entityId, category },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-      const picker = e.target as HTMLElement & { value: string };
-      picker.value = "";
-      return;
-    }
-
-    // For non-climate entities, keep the external-entity-added event
-    this.dispatchEvent(
-      new CustomEvent("external-entity-added", {
-        detail: { entityId, category },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-
-    // Clear the picker value
     const picker = e.target as HTMLElement & { value: string };
     picker.value = "";
+    if (!entityId || !entityId.startsWith("climate.")) return;
+    if (this.devices.some((d) => d.entity_id === entityId)) return;
+    const detected = this._detectClimateType(entityId);
+    const type: DeviceType = detected === "thermostat" ? "trv" : "ac";
+    const newDevices = [...this.devices, { entity_id: entityId, type, role: "auto" as const }];
+    this._fireDeviceChanged(newDevices);
   }
 }
 
